@@ -1,0 +1,67 @@
+/* 調書グリッド（workpaper-grid）のスタイル。接頭辞 wg- で他アプリの CSS と衝突しないようにしている */
+.wg { --wg-ink: #1f2a37; --wg-muted: #6b7686; --wg-line: #d9dee6; --wg-paper: #f7f8fa; --wg-comment: #e5484d;
+  display: flex; flex-direction: column; height: 100%; min-width: 0; min-height: 0; color: var(--wg-ink); }
+.wg button { white-space: nowrap; font: inherit; font-size: 13px; padding: 8px 14px; border: 1px solid var(--wg-ink); background: #fff; border-radius: 6px; cursor: pointer; }
+.wg button.primary { background: var(--wg-ink); color: #fff; }
+.wg button:disabled { opacity: .4; cursor: default; }
+.wg .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.wg .hint { font-size: 12px; color: var(--wg-muted); line-height: 1.6; }
+
+.wg-head { display: flex; align-items: center; gap: 8px; padding: 10px 12px; border-bottom: 1px solid var(--wg-line); }
+.wg-head .title { font-weight: 600; flex: 1; }
+.wg-head button.icon { padding: 6px 10px; font-size: 15px; line-height: 1; }
+
+.wg-toolbar { display: flex; align-items: center; gap: 2px; padding: 4px 12px; border-bottom: 1px solid var(--wg-line); background: var(--wg-paper); flex-wrap: wrap; }
+.wg-toolbar button, .wg-toolbar select { font: inherit; font-size: 13px; padding: 3px 8px; border: 1px solid transparent; background: transparent; border-radius: 4px; cursor: pointer; min-width: 28px; }
+.wg-toolbar button:hover:not(:disabled), .wg-toolbar select:hover { background: #fff; border-color: var(--wg-line); }
+.wg-toolbar button.on { background: #fff; border-color: var(--wg-ink); }
+.wg-toolbar button:disabled { opacity: .35; cursor: default; }
+.wg-toolbar .sep { width: 1px; height: 18px; background: var(--wg-line); margin: 0 6px; }
+.wg-toolbar .clr { position: relative; font-size: 13px; padding: 3px 8px; border-radius: 4px; cursor: pointer; }
+.wg-toolbar .clr:hover { background: #fff; }
+.wg-toolbar .clr input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+
+.wg-fbar { display: flex; align-items: center; gap: 8px; padding: 4px 12px; border-bottom: 1px solid var(--wg-line); font-size: 13px; }
+.wg-fbar .addr { min-width: 90px; font-family: ui-monospace, Menlo, Consolas, monospace; }
+.wg-fbar .fx { color: var(--wg-muted); font-style: italic; }
+.wg-fbar input { flex: 1; font: inherit; font-size: 13px; padding: 4px 8px; border: 1px solid var(--wg-line); border-radius: 4px; }
+.wg-fbar input:focus { outline: 2px solid #2563eb44; border-color: #2563eb; }
+
+.wg-findbar { display: flex; align-items: center; gap: 6px; padding: 6px 12px; border-bottom: 1px solid var(--wg-line); background: #fffbe6; font-size: 13px; }
+.wg-findbar input { font: inherit; font-size: 13px; padding: 4px 8px; border: 1px solid var(--wg-line); border-radius: 4px; width: 180px; }
+.wg-findbar button { font-size: 12px; padding: 4px 10px; border-radius: 4px; }
+.wg-findbar button.x { border: none; background: none; margin-left: auto; font-size: 16px; }
+
+.wg-tabs { display: flex; gap: 4px; padding: 6px 12px 0; border-bottom: 1px solid var(--wg-line); }
+.wg-tabs button { border: 1px solid var(--wg-line); border-bottom: none; background: var(--wg-paper); border-radius: 6px 6px 0 0; padding: 6px 12px; }
+.wg-tabs button.on { background: #fff; font-weight: 600; }
+.wg-tabs button.add { border: 1px dashed var(--wg-line); background: transparent; color: var(--wg-muted); padding: 6px 10px; }
+.wg-tabs input.rename { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid var(--wg-ink); border-bottom: none; border-radius: 6px 6px 0 0; width: 140px; outline: none; }
+.wg-tabs .hidden-sheets { margin-left: auto; align-self: center; font-size: 11px; color: var(--wg-muted); padding: 0 4px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
+
+.wg-grid { flex: 1; min-height: 0; }
+/* glide はキャンバス側でカーソルを上書きするので、行高ドラッグ・書式コピー中は強制する */
+.wg-grid.rowresize, .wg-grid.rowresize * { cursor: row-resize !important; }
+.wg-grid.fmtcopy, .wg-grid.fmtcopy * { cursor: copy !important; }
+.wg-empty { display: grid; place-items: center; height: 100%; color: var(--wg-muted); }
+
+.wg-legend { display: flex; gap: 12px; padding: 6px 12px; font-size: 12px; color: var(--wg-muted); border-top: 1px solid var(--wg-line); align-items: center; }
+.wg-legend i { display: inline-block; width: 12px; height: 12px; border: 1px solid var(--wg-line); margin-right: 4px; vertical-align: -2px; }
+.wg-legend i.tri { background: linear-gradient(225deg, var(--wg-comment) 0 38%, #fff 38%); }
+.wg-legend .cur { margin-left: auto; font-family: ui-monospace, Menlo, Consolas, monospace; color: var(--wg-ink); }
+.wg-help { font-size: 11px; color: var(--wg-muted); padding: 0 12px 8px; }
+
+.wg-backdrop { position: fixed; inset: 0; z-index: 50; }
+.wg-backdrop.dim { background: rgba(0,0,0,.25); }
+.wg-menu { position: fixed; z-index: 51; background: #fff; border: 1px solid var(--wg-line); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 4px; min-width: 190px; display: flex; flex-direction: column; }
+.wg-menu button { border: none; background: none; text-align: left; padding: 7px 12px; border-radius: 4px; }
+.wg-menu button:hover { background: var(--wg-paper); }
+.wg-menu hr { border: none; border-top: 1px solid var(--wg-line); margin: 4px 0; }
+.wg-note { position: fixed; z-index: 51; width: 300px; background: #fffbe6; border: 1px solid #e6c65c; border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+.wg-note .note-head { font-size: 12px; color: var(--wg-muted); }
+.wg-note textarea { font: inherit; font-size: 13px; min-height: 76px; border: 1px solid var(--wg-line); border-radius: 4px; padding: 6px 8px; resize: vertical; background: #fff; }
+.wg-note button { padding: 6px 12px; }
+.wg-note .hint { margin-left: auto; }
+.wg-dialog { position: fixed; z-index: 52; left: 50%; top: 40%; transform: translate(-50%, -50%); background: #fff; border: 1px solid var(--wg-line); border-radius: 8px; box-shadow: 0 12px 32px rgba(0,0,0,.18); padding: 18px 20px; min-width: 320px; display: flex; flex-direction: column; gap: 12px; font-size: 13px; }
+.wg-dialog p { margin: 0; line-height: 1.6; }
+.wg-dialog button { padding: 6px 14px; }

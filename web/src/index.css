@@ -1,0 +1,46 @@
+/* 試作アプリ側のスタイル（左パネルとレイアウト）。グリッド本体は workpaper-grid/styles.css */
+:root {
+  --ink: #1f2a37; --muted: #6b7686; --line: #d9dee6; --paper: #f7f8fa;
+  --changed: #ffe58f; --ai: #ffd6a5; --formula: #eef1f5; --comment: #e5484d;
+  font-family: "Noto Sans JP", "Hiragino Sans", system-ui, sans-serif; color: var(--ink);
+}
+* { box-sizing: border-box; }
+body { margin: 0; background: #fff; }
+.app { display: grid; grid-template-columns: 360px 1fr; height: 100vh; }
+.pane { height: 100vh; min-width: 0; }
+
+.left { display: flex; flex-direction: column; min-height: 0; border-right: 1px solid var(--line); background: var(--paper); }
+.left-head { padding: 16px 20px; border-bottom: 1px solid var(--line); }
+.left h1 { font-size: 18px; font-weight: 600; margin: 0 0 8px; }
+.left h2 { font-size: 13px; font-weight: 600; margin: 0 0 6px; display: flex; align-items: center; gap: 6px; }
+.left p { color: var(--muted); font-size: 13px; line-height: 1.6; margin: 0 0 10px; }
+.count { background: var(--ink); color: #fff; border-radius: 10px; font-size: 11px; padding: 0 7px; line-height: 18px; }
+.hint { font-size: 12px; color: var(--muted); line-height: 1.6; }
+.row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.left button, .btn { white-space: nowrap; font-size: 13px; font: inherit; padding: 8px 14px; border: 1px solid var(--ink); background: #fff; border-radius: 6px; cursor: pointer; }
+.left button.primary { background: var(--ink); color: #fff; }
+.left button:disabled, .btn.off { opacity: .4; cursor: default; }
+.left-tabs { display: flex; gap: 4px; padding: 10px 20px 0; border-bottom: 1px solid var(--line); }
+.left-tabs button { border: 1px solid var(--line); border-bottom: none; background: transparent; border-radius: 6px 6px 0 0; padding: 6px 12px; color: var(--muted); }
+.left-tabs button.on { background: #fff; color: var(--ink); font-weight: 600; }
+.left-tabs .count { background: var(--muted); }
+.left-tabs button.on .count { background: var(--ink); }
+.comments, .history { flex: 1; min-height: 0; overflow: auto; padding: 16px 20px; display: flex; flex-direction: column; gap: 8px; }
+.comments ul, .review ul, .history ul { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.history li { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 6px 10px; font-size: 12px; display: grid; grid-template-columns: auto 1fr; gap: 8px; line-height: 1.5; cursor: pointer; }
+.history li:hover { border-color: var(--muted); }
+.history .who { display: inline-block; font-size: 10px; padding: 0 5px; border-radius: 3px; margin-right: 4px; background: var(--changed); }
+.history .who.ai { background: var(--ai); }
+.history .who.sys { background: var(--formula); }
+.history .when { color: var(--muted); font-size: 11px; }
+.history .val { white-space: pre-wrap; word-break: break-all; }
+.comments li, .review li { background: #fff; border: 1px solid var(--line); border-radius: 6px; padding: 8px 10px; cursor: pointer; font-size: 13px; display: grid; grid-template-columns: auto 1fr auto; gap: 8px; align-items: start; line-height: 1.5; }
+.comments li:hover, .review li:hover { border-color: var(--muted); }
+.comments li.on { border-color: var(--ink); box-shadow: 0 0 0 1px var(--ink); }
+.addr { font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 12px; color: var(--muted); white-space: nowrap; padding-top: 1px; }
+.comments li .x { border: none; background: none; padding: 0 4px; color: var(--muted); font-size: 15px; line-height: 1; }
+.comments li .x:hover { color: var(--comment); }
+.comments .primary { align-self: stretch; }
+.review { padding: 16px 20px; border-top: 1px solid var(--line); background: #fff4e8; max-height: 45vh; overflow: auto; display: flex; flex-direction: column; gap: 8px; }
+.review .text s { color: var(--muted); }
+.review .text b { font-weight: 600; white-space: pre-wrap; }

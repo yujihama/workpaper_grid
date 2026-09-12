@@ -1,0 +1,15 @@
+import ironcalc as ic, time
+m = ic.load_from_xlsx("proto/sample_workpaper.xlsx","en","UTC")
+print("sheets:", [w["name"] for w in m.get_worksheets_properties()])
+def v(s,r,c): return m.get_formatted_cell_value(s,r,c)
+print("手続!B11 =", v(0,11,2), "| B12 =", v(0,12,2), "| 抽出率 =", v(1,3,2))
+t=time.perf_counter()
+m.set_user_input(1,10,2,"1"); m.set_user_input(1,11,2,"1"); m.evaluate()
+print("after 2 more exceptions: B11 =", v(0,11,2), "| B12 =", v(0,12,2), f"({(time.perf_counter()-t)*1000:.2f} ms)")
+m.set_user_input(0,7,3,"承認印を確認、例外なし"); m.evaluate()
+print("text input:", v(0,7,3))
+m.save_to_xlsx("proto/ironcalc_out.xlsx")
+from openpyxl import load_workbook
+o = load_workbook("proto/ironcalc_out.xlsx")
+ws=o["手続"]; print("merged kept?", list(ws.merged_cells.ranges)); print("A1 bold?", ws["A1"].font.b, "hdr fill:", ws["A6"].fill.fgColor.rgb, "border:", ws["A7"].border.left.style, "colwidth B:", ws.column_dimensions["B"].width)
+print("B12 formula kept?", ws["B12"].value)
