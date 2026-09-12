@@ -9,6 +9,21 @@ export type Merge = { sheet: number; r1: number; c1: number; r2: number; c2: num
 export type SheetInfo = { name: string; state: string }; // state: visible / hidden / veryHidden
 export type CellEdit = { row: number; col: number; value: string };
 
+// 元ファイルにあって IronCalc が持たないもの（表示用。保存時は元ファイル側に残す）
+export type Anchor = { col: number; row: number; colOff: number; rowOff: number }; // 1始まり、オフセットは EMU
+export type Emu = { cx: number; cy: number };
+export type ImageAsset = { sheet: number; from: Anchor; to: Anchor | null; ext: Emu | null; dataUrl: string };
+export type ShapeAsset = { sheet: number; from: Anchor; to: Anchor | null; ext: Emu | null; name: string; text?: string; kind: "chart" | "shape" };
+export type Note = Pos & { author: string; text: string }; // Excel のメモ（旧コメント）
+export type Hyperlink = Pos & { target: string };
+export type Validation = { sheet: number; r1: number; c1: number; r2: number; c2: number; type: string; formula1: string };
+export type SheetDefaults = { sheet: number; rowPx: number; colPx: number }; // 既定の行高・列幅（Excel のピクセル）
+export type Assets = { notes: Note[]; images: ImageAsset[]; shapes: ShapeAsset[]; hyperlinks: Hyperlink[]; validations: Validation[]; defaults: SheetDefaults[] };
+export const EMPTY_ASSETS: Assets = { notes: [], images: [], shapes: [], hyperlinks: [], validations: [], defaults: [] };
+
+// 行列の挿入・削除・移動。保存時にサーバへ送り、温存した図形・メモ等の位置に再生する
+export type StructOp = { sheet_orig_name: string | null; kind: "insert_rows" | "delete_rows" | "insert_cols" | "delete_cols" | "move_rows" | "move_cols"; at: number; n: number; delta: number };
+
 // セルに紐づく UI 状態。履歴（Ctrl+Z）はこのスナップショットとモデルの undo を組にして戻す
 export type Snap = {
   marks: Map<string, Mark>;
@@ -17,12 +32,18 @@ export type Snap = {
   proposalEntry: number | null;
   merges: Merge[];
   locks: Set<string>; // 編集ロック（セッション内のみ。IronCalc に保護属性が無いため xlsx には残らない）
+  origNames: (string | null)[]; // 各シートが元ファイルのどのシートか（新規シートは null）。保存時の土台合わせに使う
+  structOps: StructOp[];
+  assets: Assets;
 };
 
 export const key = (s: number, r: number, c: number) => `${s}:${r}:${c}`;
 export const parseKey = (k: string) => k.split(":").map(Number) as [number, number, number];
 export const same = (a: Pos, b: Pos) => a.sheet === b.sheet && a.row === b.row && a.col === b.col;
-export const EMPTY_SNAP: Snap = { marks: new Map(), comments: [], proposals: [], proposalEntry: null, merges: [], locks: new Set() };
+export const EMPTY_SNAP: Snap = {
+  marks: new Map(), comments: [], proposals: [], proposalEntry: null, merges: [], locks: new Set(), origNames: [], structOps: [], assets: EMPTY_ASSETS,
+};
+export const EMU_PER_PX = 9525;
 
 export const colName = columnNameFromNumber;
 export const colNum = (s: string) => {
