@@ -12,9 +12,8 @@ import {
   type Theme,
 } from "@glideapps/glide-data-grid";
 import type { Area } from "@ironcalc/wasm";
-import { drawBorders, drawCellText, drawCommentMark, drawDropdownMark, drawLine, drawLockMark, drawNoteMark, fontOf, hAlignOf, isNumeric, neededHeight, textWidth } from "./render";
-import { colName, colNum, colRange, EMU_PER_PX, key, NUM_FMTS, rowRange, same, type Anchor, type Merge, type Pos } from "./types";
-import { icToPxH, icToPxW } from "./units";
+import { drawBorders, drawCellText, drawCommentMark, drawLine, drawLockMark, fontOf, hAlignOf, isNumeric, textWidth } from "./render";
+import { colName, colRange, key, NUM_FMTS, rowRange, same, type Merge, type Pos } from "./types";
 import type { Workbook } from "./useWorkbook";
 
 const MIN_ROWS = 40;
@@ -70,30 +69,6 @@ export function WorkpaperGrid({ wb, title }: { wb: Workbook; title?: string }) {
   fmtCopyRef.current = fmtCopy;
   const [renaming, setRenaming] = useState<{ idx: number; name: string } | null>(null); // シート名をタブ上で編集中
   const [confirmBox, setConfirmBox] = useState<{ text: string; ok: () => void } | null>(null); // アプリ内の確認ダイアログ（window.confirm は環境により出ない）
-  const gridEl = useRef<HTMLDivElement | null>(null);
-  const [viewRegion, setViewRegion] = useState<{ x: number; y: number; n?: number }>({ x: 1, y: 0 }); // 表示中の左上セルとスクロール回数。重ね表示の位置更新に使う
-  const [dv, setDv] = useState<{ row: number; col: number; x: number; y: number; options: string[] } | null>(null); // 入力規則のドロップダウン
-
-  // 元ファイルの列幅・行高を Excel のピクセルで（IronCalc の単位から換算。未指定の行列はファイルの既定値）。図形の位置計算と表示の基準
-  const defaults = ui.assets.defaults.find((d) => d.sheet === sheet);
-  const realH = (real: number) => icToPxH(model?.getRowHeight(sheet, real) ?? 0, defaults?.rowPx);
-  const realW = (c: number) => icToPxW(model?.getColumnWidth(sheet, c) ?? 0, defaults?.colPx);
-  // 大きさだけ持つ図形（oneCellAnchor）は、元ファイルの列幅・行高で「どのセルまで掛かるか」を求め、そのセルに紐づける（Excel と同じ範囲を覆う）
-  const extToAnchor = (from: Anchor, ext: { cx: number; cy: number }): Anchor => {
-    let col = from.col,
-      remW = from.colOff / EMU_PER_PX + ext.cx / EMU_PER_PX;
-    while (col < from.col + 200 && remW > realW(col)) {
-      remW -= realW(col);
-      col++;
-    }
-    let row = from.row,
-      remH = from.rowOff / EMU_PER_PX + ext.cy / EMU_PER_PX;
-    while (row < from.row + 2000 && remH > realH(row)) {
-      remH -= realH(row);
-      row++;
-    }
-    return { col, row, colOff: remW * EMU_PER_PX, rowOff: remH * EMU_PER_PX };
-  };
 
   // ---- 表示する行・列（非表示の行列は抜く。高さ/幅 0 = 非表示）とグリッド添字↔実座標 ----
   const vis = useMemo(() => {
@@ -107,13 +82,6 @@ export function WorkpaperGrid({ wb, title }: { wb: Workbook; title?: string }) {
         maxC = Math.max(maxC, c);
       }
     }
-    // 画像・図形が掛かる範囲も描画対象に含める（右下セルが範囲外だと位置が取れない）
-    for (const a of [...ui.assets.images, ...ui.assets.shapes]) {
-      if (a.sheet !== sheet) continue;
-      const to = a.to ?? (a.ext ? extToAnchor(a.from, a.ext) : a.from);
-      maxR = Math.max(maxR, to.row);
-      maxC = Math.max(maxC, to.col);
-    }
     const rows: number[] = [],
       cols: number[] = [];
     for (let r = 1; r <= Math.max(maxR + 8, MIN_ROWS); r++) if (model.getRowHeight(sheet, r) > 0) rows.push(r);
@@ -121,7 +89,7 @@ export function WorkpaperGrid({ wb, title }: { wb: Workbook; title?: string }) {
     const fc = model.getFrozenColumnsCount(sheet); // 枠固定（列）。行の固定は glide に無い
     return { rows, cols, frozenCols: cols.filter((c) => c <= fc).length, maxR, maxC };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [model, sheet, wb.tick, sheets.length, ui.assets]);
+  }, [model, sheet, wb.tick, sheets.length]);
   const R = (row0: number) => vis.rows[row0];
   const C = (col0: number) => vis.cols[col0 - 1];
   const rowIdx = (r: number) => vis.rows.indexOf(r);
@@ -130,131 +98,15 @@ export function WorkpaperGrid({ wb, title }: { wb: Workbook; title?: string }) {
   const columns = useMemo<GridColumn[]>(
     () => [
       { title: "", id: "__row", width: ROWNO_W, themeOverride: { bgCell: "#f3f4f6" } },
-      ...vis.cols.map((c) => ({ title: colName(c), id: String(c), width: colW[c] ?? clampW(realW(c)) })),
+      ...vis.cols.map((c) => ({ title: colName(c), id: String(c), width: colW[c] ?? clampW(model ? model.getColumnWidth(sheet, c) : 100) })),
     ],
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [vis.cols, sheet, wb.tick, colW, defaults]
+    [vis.cols, sheet, wb.tick, colW]
   );
   const commentKeys = useMemo(() => new Set(ui.comments.map((c) => key(c.sheet, c.row, c.col))), [ui.comments]);
   const extOf = (r: number, c: number) => model!.getCellStyle(sheet, r, c);
   const styleOf = (r: number, c: number) => extOf(r, c).style;
   const mergeAt = (r: number, c: number) => wb.mergeAt(sheet, r, c);
-  // 元ファイル由来のもの（メモ・リンク・入力規則）はキーで引けるようにしておく
-  const noteKeys = useMemo(() => new Map(ui.assets.notes.map((n) => [key(n.sheet, n.row, n.col), n])), [ui.assets.notes]);
-  const linkKeys = useMemo(() => new Map(ui.assets.hyperlinks.map((h) => [key(h.sheet, h.row, h.col), h])), [ui.assets.hyperlinks]);
-  const dvAt = (r: number, c: number) => ui.assets.validations.find((v) => v.sheet === sheet && v.type === "list" && r >= v.r1 && r <= v.r2 && c >= v.c1 && c <= v.c2);
-  // 入力規則（リスト）の候補: "a,b,c" の直書き、または =$A$1:$A$5 のような範囲参照
-  const dvOptions = (formula1: string): string[] => {
-    const f = formula1.trim();
-    if (f.startsWith('"')) return f.replace(/^"|"$/g, "").split(",").map((s) => s.trim());
-    const m = /^=?(?:(.+)!)?\$?([A-Z]+)\$?(\d+)(?::\$?([A-Z]+)\$?(\d+))?$/.exec(f);
-    if (!m || !model) return [];
-    const si = m[1] ? sheets.findIndex((s) => s.name === m[1].replace(/^'|'$/g, "")) : sheet;
-    if (si < 0) return [];
-    const r1 = Number(m[3]),
-      c1 = colNum(m[2]),
-      r2 = m[5] ? Number(m[5]) : r1,
-      c2 = m[4] ? colNum(m[4]) : c1;
-    const out: string[] = [];
-    for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) {
-      const v = model.getFormattedCellValue(si, r, c);
-      if (v) out.push(v);
-    }
-    return out;
-  };
-  // ---- 行の表示高さ：元ファイルの値をそのまま使う。ただし Excel と同じく「高さを明示していない行」は折り返し文字に合わせて自動調整する ----
-  const dispW = (c: number) => colW[c] ?? clampW(realW(c));
-  // シートの既定行高 = 最頻値。これと同じ高さの行は「明示していない」とみなす
-  const sheetDefaultH = useMemo(() => {
-    const cnt = new Map<number, number>();
-    for (const r of vis.rows) cnt.set(realH(r), (cnt.get(realH(r)) ?? 0) + 1);
-    let best = 20,
-      n = -1;
-    for (const [h, c] of cnt) if (c > n) [best, n] = [h, c];
-    return best;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vis.rows, sheet, wb.tick]);
-  const autoFit = useRef(new Map<string, number>()); // 行ごとの自動調整高さ（tick ごとに作り直す）
-  useMemo(() => autoFit.current.clear(), [wb.tick, sheet, columns]); // eslint-disable-line react-hooks/exhaustive-deps
-  const autoFitH = (real: number) => {
-    const k = key(sheet, real, 0);
-    const c0 = autoFit.current.get(k);
-    if (c0 !== undefined) return c0;
-    let need = 0;
-    if (model)
-      for (const c of vis.cols) {
-        const content = model.getCellContent(sheet, real, c);
-        if (!content) continue;
-        const mg = mergeAt(real, c);
-        if (mg && (mg.r1 !== real || mg.c1 !== c)) continue;
-        const st = styleOf(real, c); // 大きいフォント・折り返し・セル内改行のいずれも行を広げる（Excel と同じ）
-        const w = mg ? vis.cols.filter((x) => x >= mg.c1 && x <= mg.c2).reduce((a, x) => a + dispW(x), 0) : dispW(c);
-        need = Math.max(need, neededHeight(model.getFormattedCellValue(sheet, real, c), st, w - 12));
-      }
-    autoFit.current.set(k, need);
-    return need;
-  };
-  const rowHeightOf = (row0: number) => {
-    const real = R(row0);
-    if (rowH[real] !== undefined) return rowH[real]; // ドラッグ中
-    const h = Math.max(12, Math.round(realH(real)));
-    if (wb.explicitRows.current.has(key(sheet, real, 0))) return h; // 自分で指定した行はそのまま
-    if (Math.abs(realH(real) - sheetDefaultH) > 0.5) return h; // ファイルで明示された高さ
-    return Math.max(h, autoFitH(real)); // 明示していない行は Excel と同じく折り返しに合わせて広げる
-  };
-  // 画像・図形の重ね表示位置（グリッド内の相対座標）。画面外のセルは glide の getBounds が当てにならないので、
-  // glide のスクロール量と行高・列幅の累積から自前で出す（固定列はスクロールしない）
-  const scroller = () => gridEl.current?.querySelector(".dvn-scroller") as HTMLElement | null;
-  useEffect(() => {
-    const sc = scroller();
-    if (!sc) return;
-    const h = () => setViewRegion((v) => ({ ...v, n: (v.n ?? 0) + 1 }));
-    sc.addEventListener("scroll", h, { passive: true });
-    return () => sc.removeEventListener("scroll", h);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sheet, sheets.length, model]);
-  const overlays = useMemo(() => {
-    const el = gridEl.current;
-    if (!el || !model || !vis.rows.length) return [] as { kind: "image" | "shape"; x: number; y: number; w: number; h: number; src?: string; label?: string }[];
-    const sc = scroller();
-    const st = sc?.scrollTop ?? 0,
-      sl = sc?.scrollLeft ?? 0;
-    const HEADER_H = 36; // glide の既定 headerHeight
-    const rowsTop: number[] = [0];
-    for (let i = 0; i < vis.rows.length; i++) rowsTop.push(rowsTop[i] + rowHeightOf(i));
-    const colsLeft: number[] = [0];
-    for (let i = 0; i < columns.length; i++) {
-      const c = columns[i];
-      colsLeft.push(colsLeft[i] + ("width" in c && typeof c.width === "number" ? c.width : 100));
-    }
-    const freeze = 1 + vis.frozenCols;
-    // セル内オフセット（元ファイルのピクセル）を、表示上のセル寸法に合わせて伸縮する
-    const pt = (a: Anchor) => {
-      const x = colIdx(a.col),
-        y = rowIdx(a.row);
-      if (x <= 0 || y < 0) return null;
-      const rw = realW(a.col) || 1,
-        rh = realH(a.row) || 1;
-      return {
-        x: colsLeft[x] - (x >= freeze ? sl : 0) + ((a.colOff / EMU_PER_PX) * dispW(a.col)) / rw,
-        y: HEADER_H + rowsTop[y] - st + ((a.rowOff / EMU_PER_PX) * rowHeightOf(y)) / rh,
-      };
-    };
-    const items: { kind: "image" | "shape"; x: number; y: number; w: number; h: number; src?: string; label?: string }[] = [];
-    const place = (kind: "image" | "shape", a: { from: Anchor; to: Anchor | null; ext: { cx: number; cy: number } | null }, src?: string, label?: string) => {
-      const p = pt(a.from);
-      if (!p) return;
-      const to = a.to ?? (a.ext ? extToAnchor(a.from, a.ext) : null);
-      const q = to ? pt(to) : null;
-      const w = q ? q.x - p.x : 120;
-      const h = q ? q.y - p.y : 60;
-      if (w > 0 && h > 0) items.push({ kind, x: p.x, y: p.y, w, h, src, label });
-    };
-    for (const im of ui.assets.images) if (im.sheet === sheet) place("image", im, im.dataUrl);
-    for (const sh of ui.assets.shapes) if (sh.sheet === sheet) place("shape", sh, undefined, sh.kind === "chart" ? `グラフ: ${sh.name}` : sh.text || sh.name);
-    return items;
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [ui.assets, sheet, wb.tick, viewRegion, vis, columns, rowH]);
 
   // ---- Excel の「はみ出し」：折り返し無し・左寄せの文字列が幅に収まらないとき、右隣の空セルへ流し込む ----
   const overflowEnd = (r: number, c: number): number | null => {
@@ -265,7 +117,7 @@ export function WorkpaperGrid({ wb, title }: { wb: Workbook; title?: string }) {
     const st = styleOf(r, c);
     if (isNumeric(display) || st.alignment?.wrap_text || hAlignOf(st, false) !== "left") return null;
     const need = textWidth(display, fontOf(st).css) + 12;
-    let width = dispW(c);
+    let width = colW[c] ?? clampW(m.getColumnWidth(sheet, c));
     if (need <= width) return null;
     let end = c;
     let i = vis.cols.indexOf(c);
@@ -273,7 +125,7 @@ export function WorkpaperGrid({ wb, title }: { wb: Workbook; title?: string }) {
       const nc = vis.cols[i + 1];
       if (m.getCellContent(sheet, r, nc) !== "" || mergeAt(r, nc)) break;
       end = nc;
-      width += dispW(nc);
+      width += colW[nc] ?? clampW(m.getColumnWidth(sheet, nc));
       i++;
     }
     return end > c ? end : null;
@@ -705,15 +557,6 @@ export function WorkpaperGrid({ wb, title }: { wb: Workbook; title?: string }) {
 
   const cur = selected ? wb.addr({ sheet, ...selected }) : "";
   const hiddenSheets = sheets.filter((s) => s.state !== "visible");
-  // 選択セルに Excel のメモがあれば、セルの右に表示（読み取り専用。保存時は元ファイル側に残る）
-  const memo = (() => {
-    if (!selected || note) return null;
-    const n = noteKeys.get(key(sheet, selected.row, selected.col));
-    const b = n && gridRef.current?.getBounds(colIdx(selected.col), rowIdx(selected.row));
-    if (!n || !b) return null;
-    const x = b.x + b.width + 4 + 240 > window.innerWidth ? b.x - 244 : b.x + b.width + 4;
-    return { note: n, x, y: b.y };
-  })();
 
   return (
     <div className="wg">
@@ -849,7 +692,6 @@ export function WorkpaperGrid({ wb, title }: { wb: Workbook; title?: string }) {
         </div>
       )}
       <div
-        ref={gridEl}
         className={`wg-grid ${cursor ? "rowresize" : fmtCopy ? "fmtcopy" : ""}`}
         onMouseDownCapture={(e) => {
           // 数式バーで「=」入力中は、セルをクリックしても入力欄のフォーカスを保つ（参照挿入のため）
@@ -916,21 +758,6 @@ export function WorkpaperGrid({ wb, title }: { wb: Workbook; title?: string }) {
             }}
             onCellContextMenu={([col, row], ev) => openMenu(col === 0 ? "row" : "cell", col, row, ev)}
             onHeaderContextMenu={(col, ev) => col >= 1 && openMenu("col", col, 0, ev)}
-            onVisibleRegionChanged={(rg) => setViewRegion((v) => ({ x: rg.x, y: rg.y, n: (v.n ?? 0) + 1 }))}
-            onCellClicked={([col, row], ev) => {
-              if (col === 0 || row >= vis.rows.length) return;
-              const r = R(row),
-                c = C(col);
-              // ハイパーリンクは Ctrl+クリックで開く（Excel と同じ。普通のクリックは選択）
-              const link = linkKeys.get(key(sheet, r, c));
-              if (link && (ev.ctrlKey || ev.metaKey) && !link.target.startsWith("#")) window.open(link.target, "_blank", "noopener");
-              // 入力規則（リスト）のセルは右端の ▾ を押すと候補が出る
-              const v = dvAt(r, c);
-              if (v && ev.localEventX > ev.bounds.width - 18) {
-                ev.preventDefault();
-                setDv({ row: r, col: c, x: ev.bounds.x, y: ev.bounds.y + ev.bounds.height, options: dvOptions(v.formula1) });
-              }
-            }}
             onMouseMove={(a) => {
               // 行番号の境界（上下 4px）にいるときは行高ドラッグの構え（カーソルを row-resize に）
               if (a.buttons === 0) {
@@ -968,7 +795,13 @@ export function WorkpaperGrid({ wb, title }: { wb: Workbook; title?: string }) {
               setGridSel({ ...emptySel, columns: CompactSelection.fromSingleSelection([Math.max(lo, 1), hi + 1]) });
               wb.setSelected(null);
             }}
-            rowHeight={rowHeightOf}
+            rowHeight={(row) => {
+              const real = R(row);
+              if (rowH[real] !== undefined) return rowH[real]; // ドラッグ中
+              const h = model.getRowHeight(sheet, real);
+              if (wb.explicitRows.current.has(key(sheet, real, 0))) return Math.max(12, Math.round(h)); // 自分で指定した行はそのまま
+              return h < 30 ? 34 : Math.round(h); // 既定に近い低い行高は折り返しが読める 34px に揃え、明示的に高い行はそれに従う
+            }}
             freezeColumns={1 + vis.frozenCols}
             drawCell={(a, draw) => {
               const { ctx, rect } = a;
@@ -983,63 +816,21 @@ export function WorkpaperGrid({ wb, title }: { wb: Workbook; title?: string }) {
                 c = C(a.col);
               const mg = mergeAt(r, c);
               drawBorders(ctx, rect, styleOf(r, c), { top: !mg || r === mg.r1, bottom: !mg || r === mg.r2, left: !mg || c === mg.c1, right: !mg || c === mg.c2 }, wb.resolveColor);
-              const k = key(sheet, r, c);
               if (a.cell.kind === GridCellKind.Text) {
-                // 文字は自前で描く（縦位置・折り返し・下線・取り消し線・フォント名・条件付き書式のアイコン/バー）。リンクは青＋下線
+                // 文字は自前で描く（縦位置・折り返し・下線・取り消し線・フォント名・条件付き書式のアイコン/バー）
                 const ar = mg ? mg.r1 : r,
                   ac = mg ? mg.c1 : c;
-                const link = linkKeys.has(k);
-                if (!mg || r === ar) drawCellText(ctx, rect, extOf(ar, ac), a.cell.displayData, link ? "#1a56db" : a.theme.textDark, wb.resolveColor, { underline: link });
+                if (!mg || r === ar) drawCellText(ctx, rect, extOf(ar, ac), a.cell.displayData, a.theme.textDark, wb.resolveColor);
               } else draw();
               if (moveTarget?.kind === "col" && moveTarget.idx === a.col) drawLine(ctx, rect.x + 1, rect.y, rect.x + 1, rect.y + rect.height, "#2563eb", 3);
-              if (ui.locks.has(k)) drawLockMark(ctx, rect);
-              if (dvAt(r, c)) drawDropdownMark(ctx, rect);
-              if (noteKeys.has(k)) drawNoteMark(ctx, rect);
-              if (commentKeys.has(k)) drawCommentMark(ctx, rect);
+              if (ui.locks.has(key(sheet, r, c))) drawLockMark(ctx, rect);
+              if (commentKeys.has(key(sheet, r, c))) drawCommentMark(ctx, rect);
             }}
           />
         ) : (
           <div className="wg-empty">調書を開いてください</div>
         )}
-        {overlays.length > 0 && (
-          <div className="wg-overlay">
-            {overlays.map((o, i) =>
-              o.kind === "image" ? (
-                <img key={i} src={o.src} alt="" style={{ left: o.x, top: o.y, width: o.w, height: o.h }} />
-              ) : (
-                <div key={i} className="wg-shape" style={{ left: o.x, top: o.y, width: o.w, height: o.h }}>
-                  {o.label}
-                </div>
-              )
-            )}
-          </div>
-        )}
       </div>
-      {memo && (
-        <div className="wg-memo" style={{ left: memo.x, top: memo.y }}>
-          <div className="who">{memo.note.author || "メモ"}</div>
-          {memo.note.text}
-        </div>
-      )}
-      {dv && (
-        <>
-          <div className="wg-backdrop" onMouseDown={() => setDv(null)} />
-          <div className="wg-dv" style={{ left: dv.x, top: dv.y }}>
-            {dv.options.length === 0 && <span className="hint">候補を取得できません</span>}
-            {dv.options.map((o) => (
-              <button
-                key={o}
-                onClick={() => {
-                  setDv(null);
-                  wb.applyInputs([{ row: dv.row, col: dv.col, value: o }], "edit", "入力規則");
-                }}
-              >
-                {o}
-              </button>
-            ))}
-          </div>
-        </>
-      )}
       <div className="wg-legend">
         <span><i style={{ background: "#ffe58f" }} />変更済み</span>
         <span><i style={{ background: "#ffd6a5" }} />AI更新（承認待ち）</span>
