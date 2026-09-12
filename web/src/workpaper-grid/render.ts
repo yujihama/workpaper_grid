@@ -24,6 +24,17 @@ export const textWidth = (text: string, font: string) => {
   return Math.max(...text.split("\n").map((l) => ctx.measureText(l).width));
 };
 
+// セルが必要とする高さ（px）。Excel の「行の高さの自動調整」を再現するのに使う。
+// Excel の実測: Calibri 11pt は 1 行 20px・2 行 40px、14pt は 25px → 1 行あたり フォント px × 1.36
+export const neededHeight = (text: string, st: CellStyle, maxW: number) => {
+  if (!measureCtx) measureCtx = document.createElement("canvas").getContext("2d");
+  const ctx = measureCtx!;
+  const { px, css } = fontOf(st);
+  ctx.font = css;
+  const lines = st.alignment?.wrap_text ? wrapLines(ctx, text, maxW) : text.split("\n");
+  return lines.length * Math.round(px * 1.36);
+};
+
 // 折り返し：Excel と同じく文字単位（日本語向け）
 export const wrapLines = (ctx: CanvasRenderingContext2D, text: string, maxW: number) => {
   const out: string[] = [];
@@ -46,7 +57,15 @@ const ICON_GLYPH: Record<string, string> = {
 };
 
 // 文字の描画：縦位置・折り返し・下線・取り消し線・フォント名・条件付き書式のアイコン/バーは glide が扱えないので自前で描く
-export function drawCellText(ctx: CanvasRenderingContext2D, rect: Rect, ext: ExtendedCellStyle, display: string, fg: string, color: ColorResolver) {
+export function drawCellText(
+  ctx: CanvasRenderingContext2D,
+  rect: Rect,
+  ext: ExtendedCellStyle,
+  display: string,
+  fg: string,
+  color: ColorResolver,
+  opts: { underline?: boolean } = {}
+) {
   const st = ext.style;
   const { px, css } = fontOf(st);
   const pad = 6;
@@ -96,18 +115,20 @@ export function drawCellText(ctx: CanvasRenderingContext2D, rect: Rect, ext: Ext
     const lineH = Math.round(px * 1.3);
     const total = lines.length * lineH;
     const v = st.alignment?.vertical ?? "bottom"; // Excel の既定は下揃え
-    const y0 = v === "top" ? rect.y + 3 : v === "center" ? rect.y + (rect.height - total) / 2 : rect.y + rect.height - total - 3;
+    // 余白は 1px。Excel 既定の 20px 行に 11pt（19px）が収まるように。収まらないときは上を切らず下を切る
+    let y0 = v === "top" ? rect.y + 1 : v === "center" ? rect.y + (rect.height - total) / 2 : rect.y + rect.height - total - 1;
+    y0 = Math.max(y0, rect.y + 1);
     const ha = hAlignOf(st, numeric);
     lines.forEach((line, i) => {
       const w = ctx.measureText(line).width;
       const x = ha === "right" ? x0 + innerW - w : ha === "center" ? x0 + (innerW - w) / 2 : x0;
       const y = y0 + i * lineH;
       ctx.fillText(line, x, y);
-      if (st.font.u || st.font.strike) {
+      if (st.font.u || st.font.strike || opts.underline) {
         ctx.strokeStyle = fg;
         ctx.lineWidth = 1;
         ctx.beginPath();
-        if (st.font.u) {
+        if (st.font.u || opts.underline) {
           ctx.moveTo(x, y + px + 1);
           ctx.lineTo(x + w, y + px + 1);
         }
@@ -174,6 +195,27 @@ export function drawCommentMark(ctx: CanvasRenderingContext2D, rect: Rect) {
   ctx.lineTo(rect.x + rect.width, rect.y + 9);
   ctx.closePath();
   ctx.fill();
+  ctx.restore();
+}
+// Excel のメモ（旧コメント）は紫の三角で、AI 向けコメント（赤）と区別する
+export function drawNoteMark(ctx: CanvasRenderingContext2D, rect: Rect) {
+  ctx.save();
+  ctx.fillStyle = "#7c3aed";
+  ctx.beginPath();
+  ctx.moveTo(rect.x + rect.width - 9, rect.y + rect.height);
+  ctx.lineTo(rect.x + rect.width, rect.y + rect.height);
+  ctx.lineTo(rect.x + rect.width, rect.y + rect.height - 9);
+  ctx.closePath();
+  ctx.fill();
+  ctx.restore();
+}
+// 入力規則（リスト）のドロップダウン印
+export function drawDropdownMark(ctx: CanvasRenderingContext2D, rect: Rect) {
+  ctx.save();
+  ctx.fillStyle = "#6b7686";
+  ctx.font = "10px sans-serif";
+  ctx.textBaseline = "middle";
+  ctx.fillText("▾", rect.x + rect.width - 12, rect.y + rect.height / 2);
   ctx.restore();
 }
 export function drawLockMark(ctx: CanvasRenderingContext2D, rect: Rect) {

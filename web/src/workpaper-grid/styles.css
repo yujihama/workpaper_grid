@@ -39,7 +39,16 @@
 .wg-tabs input.rename { font: inherit; font-size: 13px; padding: 5px 10px; border: 1px solid var(--wg-ink); border-bottom: none; border-radius: 6px 6px 0 0; width: 140px; outline: none; }
 .wg-tabs .hidden-sheets { margin-left: auto; align-self: center; font-size: 11px; color: var(--wg-muted); padding: 0 4px 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 40%; }
 
-.wg-grid { flex: 1; min-height: 0; }
+.wg-grid { flex: 1; min-height: 0; position: relative; overflow: hidden; }
+/* 元ファイルの画像・グラフ・図形をセル位置に重ねる（操作はグリッドに通す） */
+.wg-overlay { position: absolute; inset: 0; pointer-events: none; overflow: hidden; z-index: 3; }
+.wg-overlay img { position: absolute; object-fit: fill; box-shadow: 0 0 0 1px rgba(0,0,0,.08); }
+.wg-overlay .wg-shape { position: absolute; border: 1px dashed #7c3aed; background: rgba(124,58,237,.06); color: #7c3aed; font-size: 11px; padding: 4px 6px; overflow: hidden; border-radius: 3px; }
+.wg-memo { position: fixed; z-index: 49; width: 240px; background: #f5f3ff; border: 1px solid #c4b5fd; border-radius: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.12); padding: 8px 10px; font-size: 12px; line-height: 1.5; pointer-events: none; }
+.wg-memo .who { color: #7c3aed; font-weight: 600; margin-bottom: 2px; }
+.wg-dv { position: fixed; z-index: 51; min-width: 140px; background: #fff; border: 1px solid var(--wg-line); border-radius: 6px; box-shadow: 0 8px 24px rgba(0,0,0,.14); padding: 4px; display: flex; flex-direction: column; max-height: 240px; overflow: auto; }
+.wg-dv button { border: none; background: none; text-align: left; padding: 6px 12px; border-radius: 4px; }
+.wg-dv button:hover { background: var(--wg-paper); }
 /* glide はキャンバス側でカーソルを上書きするので、行高ドラッグ・書式コピー中は強制する */
 .wg-grid.rowresize, .wg-grid.rowresize * { cursor: row-resize !important; }
 .wg-grid.fmtcopy, .wg-grid.fmtcopy * { cursor: copy !important; }
