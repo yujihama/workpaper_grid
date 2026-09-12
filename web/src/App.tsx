@@ -42,6 +42,9 @@ export default function App() {
             <button onClick={() => openSample("sample_hidden.xlsx")} disabled={!wb.ready || wb.busy} title="非表示シート・非表示行列を含むサンプル">
               非表示ありサンプル
             </button>
+            <button onClick={() => openSample("sample_rich.xlsx")} disabled={!wb.ready || wb.busy} title="メモ・グラフ・画像・フィルタ・入力規則・リンクを含むサンプル">
+              証拠付きサンプル
+            </button>
             <label className={`btn ${!wb.ready || wb.busy ? "off" : ""}`}>
               xlsxを開く…
               <input type="file" accept=".xlsx" hidden disabled={!wb.ready || wb.busy} onChange={(e) => e.target.files?.[0] && wb.open(e.target.files[0])} />

@@ -13,6 +13,8 @@ from pydantic import BaseModel
 import ironcalc as ic
 import openpyxl
 
+from . import xlsx_pkg
+
 router = APIRouter()
 
 TMPDIR = tempfile.gettempdir()   # Windows でも動くよう /tmp 直書きを避ける
@@ -21,6 +23,7 @@ os.makedirs(LOG_DIR, exist_ok=True)
 LOG_SHEET = "変更履歴"  # 保存時に xlsx へ同梱するシート名
 
 SESSIONS: dict[str, ic.UserModel] = {}   # 試作用の常駐モデル（本番はDB/ファイルに永続化）
+ORIGINALS: dict[str, bytes] = {}         # 開いた元の xlsx（保存時の土台。図形・メモ等はここから残す）
 LOGS: dict[str, list[dict]] = {}         # セッションごとの編集ログ（追記のみ）
 
 
@@ -30,11 +33,12 @@ async def open_workbook(file: UploadFile = File(...)):
     data = await file.read()
     path = os.path.join(TMPDIR, f"{uuid.uuid4()}.xlsx")
     with open(path, "wb") as f:
-        f.write(data)
+        f.write(xlsx_pkg.strip_for_engine(data))  # IronCalc はメモ付きブックを開けないので、メモを除いたコピーを渡す
     model = ic.create_user_model_from_xlsx(path, "en", "UTC")
     model.evaluate()
     sid = uuid.uuid4().hex
     SESSIONS[sid] = model
+    ORIGINALS[sid] = data
     LOGS[sid] = []
     # 結合セルは wasm API から取れないので、表示用に openpyxl で読んで渡す（[sheet, r1, c1, r2, c2]、1始まり）
     merges = []
@@ -45,6 +49,15 @@ async def open_workbook(file: UploadFile = File(...)):
     return Response(content=bytes(model.to_bytes()), media_type="application/octet-stream",
                     headers={"X-Session-Id": sid, "X-Merges": json.dumps(merges),
                              "Access-Control-Expose-Headers": "X-Session-Id, X-Merges"})
+
+
+@router.get("/assets/{sid}")
+async def get_assets(sid: str):
+    """元ファイルにあって IronCalc が持たないもの（メモ・画像・グラフ・図形・リンク・入力規則）を画面表示用に返す"""
+    if sid not in ORIGINALS:
+        raise HTTPException(404, "session not found")
+    data = ORIGINALS[sid]
+    return {"notes": xlsx_pkg.read_notes(data), **xlsx_pkg.read_assets(data)}
 
 
 # ---- 編集ログ ------------------------------------------------------------
@@ -148,8 +161,10 @@ def apply_merges(path: str, merges: list[list[int]]) -> None:
 
 # ---- 保存 ------------------------------------------------------------------
 @router.post("/sync/{sid}")
-async def sync(sid: str, file: UploadFile = File(...), merges: str = Form("")):
-    """ブラウザ側 flushSendQueue() の差分をサーバ側モデルに適用し、変更履歴シートと結合を反映した xlsx を返す"""
+async def sync(sid: str, file: UploadFile = File(...), merges: str = Form(""), orig_names: str = Form(""), struct_ops: str = Form("")):
+    """ブラウザ側 flushSendQueue() の差分をサーバ側モデルに適用し、xlsx を返す。
+    orig_names（各シートが元ファイルのどのシートか）が来れば、元ファイルを土台に IronCalc の出力からセル部分だけを移植して
+    図形・メモ・フィルタ・入力規則・リンクを残す（xlsx_pkg.graft）。来なければ IronCalc の出力をそのまま返す（従来動作）。"""
     model = SESSIONS.get(sid)
     if model is None:
         raise HTTPException(404, "session not found")
@@ -159,10 +174,16 @@ async def sync(sid: str, file: UploadFile = File(...), merges: str = Form("")):
     write_log_sheet(model, LOGS.get(sid, []))
     out = os.path.join(TMPDIR, f"{sid}-{uuid.uuid4().hex}.xlsx")  # save_to_xlsx は既存ファイルを上書きしないため毎回別名
     model.save_to_xlsx(out)
-    if merges:
-        apply_merges(out, json.loads(merges))
-    with open(out, "rb") as f:
-        data = f.read()
+    merge_list = json.loads(merges) if merges else []
+    if orig_names and sid in ORIGINALS:
+        with open(out, "rb") as f:
+            engine = f.read()
+        data = xlsx_pkg.graft(ORIGINALS[sid], engine, json.loads(orig_names), merge_list, json.loads(struct_ops) if struct_ops else [])
+    else:
+        if merge_list:
+            apply_merges(out, merge_list)
+        with open(out, "rb") as f:
+            data = f.read()
     os.remove(out)
     return Response(content=data,
                     media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")

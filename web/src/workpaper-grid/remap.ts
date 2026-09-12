@@ -30,13 +30,32 @@ export function remap(s: Snap, sheet: number, f: Move): Snap {
       const p = f(x.row, x.col);
       return p ? [{ ...x, row: p[0], col: p[1] }] : [];
     });
-  const merges = s.merges.flatMap((g) => {
-    if (g.sheet !== sheet) return [g];
-    const a = f(g.r1, g.c1),
-      b = f(g.r2, g.c2);
-    return a && b ? [{ ...g, r1: a[0], c1: a[1], r2: b[0], c2: b[1] }] : []; // 結合の一部が消えたら結合は解く
-  });
-  return { ...s, marks, locks, comments: move(s.comments), proposals: move(s.proposals), merges };
+  const rect = <T extends { sheet: number; r1: number; c1: number; r2: number; c2: number }>(xs: T[]) =>
+    xs.flatMap((g) => {
+      if (g.sheet !== sheet) return [g];
+      const a = f(g.r1, g.c1),
+        b = f(g.r2, g.c2);
+      return a && b ? [{ ...g, r1: a[0], c1: a[1], r2: b[0], c2: b[1] }] : []; // 範囲の一部が消えたら外す（結合は解く）
+    });
+  // 図形アンカーは消えた行にあっても図形自体は残るので、位置は据え置く
+  const anchor = <T extends { sheet: number; from: { row: number; col: number }; to: { row: number; col: number } | null }>(xs: T[]) =>
+    xs.map((x) => {
+      if (x.sheet !== sheet) return x;
+      const mv = (a: { row: number; col: number }) => {
+        const p = f(a.row, a.col);
+        return p ? { ...a, row: p[0], col: p[1] } : a;
+      };
+      return { ...x, from: mv(x.from), to: x.to ? mv(x.to) : null };
+    });
+  const assets = {
+    notes: move(s.assets.notes),
+    hyperlinks: move(s.assets.hyperlinks),
+    validations: rect(s.assets.validations),
+    images: anchor(s.assets.images),
+    shapes: anchor(s.assets.shapes),
+    defaults: s.assets.defaults,
+  };
+  return { ...s, marks, locks, comments: move(s.comments), proposals: move(s.proposals), merges: rect(s.merges), assets };
 }
 
 // シートの削除・移動に合わせてシート番号を付け替える
@@ -54,7 +73,21 @@ export function remapSheets(s: Snap, f: (si: number) => number | null): Snap {
     const ns = f(ks);
     if (ns !== null) locks.add(key(ns, kr, kc));
   }
-  return { ...s, marks, locks, comments: mk(s.comments), proposals: mk(s.proposals), merges: mk(s.merges) };
+  const origNames: (string | null)[] = [];
+  s.origNames.forEach((name, i) => {
+    const ns = f(i);
+    if (ns !== null) origNames[ns] = name;
+  });
+  for (let i = 0; i < origNames.length; i++) if (origNames[i] === undefined) origNames[i] = null;
+  const assets = {
+    notes: mk(s.assets.notes),
+    hyperlinks: mk(s.assets.hyperlinks),
+    validations: mk(s.assets.validations),
+    images: mk(s.assets.images),
+    shapes: mk(s.assets.shapes),
+    defaults: mk(s.assets.defaults),
+  };
+  return { ...s, marks, locks, comments: mk(s.comments), proposals: mk(s.proposals), merges: mk(s.merges), origNames, assets };
 }
 
 export const identity: Move = (r, c) => [r, c];
