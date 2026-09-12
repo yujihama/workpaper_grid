@@ -4,8 +4,7 @@ import wasmUrl from "@ironcalc/wasm/wasm_bg.wasm?url";
 import type { WorkbookApi } from "./api";
 import { describe, type LogAction, type LogCell, type LogEntry, type LogInput } from "./log";
 import { colDrop, colMove, colShift, identity, remap, remapSheets, rowDrop, rowMove, rowShift, sheetDrop, sheetMove, type Move } from "./remap";
-import { colName, colRange, EMPTY_SNAP, key, rowRange, same, type CellEdit, type Merge, type Pos, type Proposal, type SheetInfo, type Snap, type StructOp } from "./types";
-import { pxToIcH, pxToIcW } from "./units";
+import { colName, colRange, EMPTY_SNAP, key, rowRange, same, type CellEdit, type Merge, type Pos, type Proposal, type SheetInfo, type Snap } from "./types";
 
 // 履歴1件 = モデル側のundo回数 + UI状態の前後 + ログ
 type Entry = { id: number; steps: number; before: Snap; after: Snap; log: LogEntry };
@@ -150,7 +149,7 @@ export function useWorkbook(api: WorkbookApi) {
       const ws = m.getWorksheetsProperties().map((w) => ({ name: w.name, state: w.state }));
       setSheets(ws);
       setSheet(Math.max(0, ws.findIndex((w) => w.state === "visible"))); // 先頭が非表示なら最初の表示シートへ
-      applyUi({ ...EMPTY_SNAP, merges, origNames: ws.map((w) => w.name) });
+      applyUi({ ...EMPTY_SNAP, merges });
       undoStack.current = [];
       redoStack.current = [];
       entrySeq.current = 0;
@@ -159,10 +158,6 @@ export function useWorkbook(api: WorkbookApi) {
       setLogs([]);
       setSelected(null);
       refresh();
-      // 元ファイルにあって IronCalc が持たないもの（メモ・画像・グラフ・リンク・入力規則）は別途取り寄せて重ねて表示する
-      api.assets(sessionId).then((assets) => {
-        if (sidRef.current === sessionId) applyUi({ ...uiRef.current, assets });
-      }).catch((e) => console.error(e));
     } catch (e) {
       alert(String(e));
     } finally {
@@ -207,51 +202,38 @@ export function useWorkbook(api: WorkbookApi) {
   };
 
   // ---- 行・列の挿入/削除/非表示/サイズ/移動 ----
-  // 構造操作は Snap にも記録し（undo/redo で戻る）、保存時にサーバへ送って図形・メモ等の位置に再生する
-  const structural = (action: LogAction, range: string, note: string, op: () => void, move: Move, rec?: Omit<StructOp, "sheet_orig_name">) =>
+  const structural = (action: LogAction, range: string, note: string, op: () => void, move: Move) =>
     guarded(() => {
       op();
-      commit(
-        1,
-        (s) => {
-          const next = remap(s, sheet, move);
-          return rec ? { ...next, structOps: [...next.structOps, { ...rec, sheet_orig_name: s.origNames[sheet] ?? null }] } : next;
-        },
-        { actor: "user", action, sheet: sheetName(sheet), range, cells: [], note }
-      );
+      commit(1, (s) => remap(s, sheet, move), { actor: "user", action, sheet: sheetName(sheet), range, cells: [], note });
     });
   const cnt = (n: number) => `${n} 件`;
-  const insertRowsAt = (at: number, n: number) =>
-    structural("insert_rows", rowRange(at, at + n - 1), cnt(n), () => mm().insertRows(sheet, at, n), rowShift(at, n), { kind: "insert_rows", at, n, delta: 0 });
-  const deleteRowsAt = (at: number, n: number) =>
-    structural("delete_rows", rowRange(at, at + n - 1), cnt(n), () => mm().deleteRows(sheet, at, n), rowDrop(at, n), { kind: "delete_rows", at, n, delta: 0 });
-  const insertColsAt = (at: number, n: number) =>
-    structural("insert_cols", colRange(at, at + n - 1), cnt(n), () => mm().insertColumns(sheet, at, n), colShift(at, n), { kind: "insert_cols", at, n, delta: 0 });
-  const deleteColsAt = (at: number, n: number) =>
-    structural("delete_cols", colRange(at, at + n - 1), cnt(n), () => mm().deleteColumns(sheet, at, n), colDrop(at, n), { kind: "delete_cols", at, n, delta: 0 });
+  const insertRowsAt = (at: number, n: number) => structural("insert_rows", rowRange(at, at + n - 1), cnt(n), () => mm().insertRows(sheet, at, n), rowShift(at, n));
+  const deleteRowsAt = (at: number, n: number) => structural("delete_rows", rowRange(at, at + n - 1), cnt(n), () => mm().deleteRows(sheet, at, n), rowDrop(at, n));
+  const insertColsAt = (at: number, n: number) => structural("insert_cols", colRange(at, at + n - 1), cnt(n), () => mm().insertColumns(sheet, at, n), colShift(at, n));
+  const deleteColsAt = (at: number, n: number) => structural("delete_cols", colRange(at, at + n - 1), cnt(n), () => mm().deleteColumns(sheet, at, n), colDrop(at, n));
   const hideRows = (a: number, b: number, hidden: boolean) =>
     structural(hidden ? "hide_rows" : "unhide_rows", rowRange(a, b), cnt(b - a + 1), () => mm().setRowsHidden(sheet, a, b, hidden), identity);
   const hideCols = (a: number, b: number, hidden: boolean) =>
     structural(hidden ? "hide_cols" : "unhide_cols", colRange(a, b), cnt(b - a + 1), () => mm().setColumnsHidden(sheet, a, b, hidden), identity);
-  // 高さ・幅は Excel のピクセルで受け、IronCalc の単位に換算して入れる（units.ts）
   const setRowHeight = (a: number, b: number, h: number) => {
     for (let r = a; r <= b; r++) explicitRows.current.add(key(sheet, r, 0));
-    structural("row_height", rowRange(a, b), `${Math.round(h)}px`, () => mm().setRowsHeight(sheet, a, b, pxToIcH(h)), identity);
+    structural("row_height", rowRange(a, b), `${Math.round(h)}px`, () => mm().setRowsHeight(sheet, a, b, h), identity);
   };
   const setColWidth = (a: number, b: number, w: number) =>
-    structural("col_width", colRange(a, b), `${Math.round(w)}px`, () => mm().setColumnsWidth(sheet, a, b, pxToIcW(w)), identity);
+    structural("col_width", colRange(a, b), `${Math.round(w)}px`, () => mm().setColumnsWidth(sheet, a, b, w), identity);
   // 行 [a,b] を「実行 t の手前」へ移動（t は行番号）
   const moveRowsTo = (a: number, b: number, t: number) => {
     const n = b - a + 1;
     if (t >= a && t <= b + 1) return;
     const delta = t > b ? t - n - a : t - a;
-    structural("move_rows", rowRange(a, b), `${t > b ? t - n : t} 行目へ`, () => mm().moveRows(sheet, a, n, delta), rowMove(a, n, delta), { kind: "move_rows", at: a, n, delta });
+    structural("move_rows", rowRange(a, b), `${t > b ? t - n : t} 行目へ`, () => mm().moveRows(sheet, a, n, delta), rowMove(a, n, delta));
   };
   const moveColsTo = (a: number, b: number, t: number) => {
     const n = b - a + 1;
     if (t >= a && t <= b + 1) return;
     const delta = t > b ? t - n - a : t - a;
-    structural("move_cols", colRange(a, b), `${colName(t > b ? t - n : t)} 列へ`, () => mm().moveColumns(sheet, a, n, delta), colMove(a, n, delta), { kind: "move_cols", at: a, n, delta });
+    structural("move_cols", colRange(a, b), `${colName(t > b ? t - n : t)} 列へ`, () => mm().moveColumns(sheet, a, n, delta), colMove(a, n, delta));
   };
 
   // ---- 書式 ----
@@ -344,7 +326,7 @@ export function useWorkbook(api: WorkbookApi) {
         const before = m.getWorksheetsProperties().length;
         m.newSheet();
         const name = m.getWorksheetsProperties()[before].name;
-        commit(1, (s) => ({ ...s, origNames: [...s.origNames, null] }), { actor: "user", action: "sheet_add", sheet: name, range: "-", cells: [], note: name });
+        commit(1, (s) => s, { actor: "user", action: "sheet_add", sheet: name, range: "-", cells: [], note: name });
         setSheet(before);
       }),
     rename: (idx: number, name: string) => {
@@ -518,8 +500,7 @@ export function useWorkbook(api: WorkbookApi) {
       const e: LogEntry = { seq: ++entrySeq.current, ts: new Date().toISOString(), actor: "user", action: "save", sheet: "-", range: "-", cells: [], note: outName };
       setLogs((l) => [...l, e]);
       await send([e]);
-      const u = uiRef.current;
-      const blob = await api.sync(sidRef.current, m.flushSendQueue(), u.merges, u.origNames, u.structOps);
+      const blob = await api.sync(sidRef.current, m.flushSendQueue(), uiRef.current.merges);
       const url = URL.createObjectURL(blob);
       const a = document.createElement("a");
       a.href = url;
